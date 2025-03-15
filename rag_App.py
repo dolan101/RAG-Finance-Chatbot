@@ -1,10 +1,7 @@
 import streamlit as st
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-import google.generativeai as genai
 from langchain_community.vectorstores import Chroma
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 import os
@@ -248,7 +245,6 @@ def main():
 
     user_question = st.text_input("Ask a Question from the PDF Files", key="user_question")
 
-    pdf_docs = pdf_load_from_dir('./Qualcomm_earnings/')
     if st.button("Submit & Process", key="process_button") and api_key:  # Check if API key is provided before processing
         with st.spinner("Processing..."):
             raw_text = pdf_loader("./Qualcomm_earnings/")

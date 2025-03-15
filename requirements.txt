@@ -1,7 +1,8 @@
 streamlit
-google-generativeai
 langchain
+langchain_community
+langchain_huggingface
+sentence_transformers
 PyPDF2
+pysqlite3-binary
 chromadb
-faiss-cpu
-langchain_google_genai
