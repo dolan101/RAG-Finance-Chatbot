@@ -12,28 +12,51 @@ from chromadb.config import Settings
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
+from langchain.chains.question_answering import load_qa_chain
+from langchain.prompts import PromptTemplate
 
-from langchain_community.document_loaders import DirectoryLoader, PyPDFDirectoryLoader
+
+from langchain.chains import LLMChain
+from langchain.output_parsers import PydanticOutputParser
+from pydantic import BaseModel, Field
+
+from langchain_community.document_loaders import TextLoader, DirectoryLoader, PyPDFDirectoryLoader
 
 from langchain.chains import RetrievalQA
 
 from sentence_transformers import CrossEncoder
 
 from langchain_core.retrievers import BaseRetriever
+#from langchain.retrievers import RerankRetriever
 
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 import pandas as pd
 
+from langchain_core.runnables import chain
 from typing import List
 from langchain_core.documents import Document
 
+from collections import defaultdict
+
+from langchain_huggingface.llms import HuggingFacePipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
 from langchain.evaluation import load_evaluator, EvaluatorType
 from langchain_community.llms import HuggingFaceHub
+from huggingface_hub import list_models
+
+#from langchain.prompts import PromptTemplate
+#from langchain.schema import Document
+#from langchain.embeddings import GoogleGenerativeAIEmbeddings
+
+#from langchain import load_stuff_docs_chain  # Ensure the correct import based on new guides
+#from langchain.globals import set_verbose, get_verbose  
+#
+#st.set_page_config(page_title="Document Genie", layout="wide")
 
 st.markdown("""
 ## Financial AI Assistant: Get Qualcomm's quarterly earnings
@@ -41,7 +64,7 @@ st.markdown("""
 
 Follow these simple steps to interact with the chatbot:
 
-1. **Enter Your Access Token**: You'll need Access Token for the chatbot to access Huggingface's Generative AI models. Obtain your Access Token https://huggingface.co/settings/tokens.
+1. **Enter Your API Key**: You'll need API key for the chatbot to access Huggingface's Generative AI models. Obtain your Access Token https://huggingface.co/settings/tokens.
 
 3. **Ask a Question**: Ask any questions related to Qualcomm's earnings from 2023 to 2025.
 """)
@@ -231,7 +254,7 @@ def compare_retrievers(user_question, api_key, vector_store):
 def main():
     st.header("AI Financial Chatbot💁")
 
-    user_question = st.text_input("Ask a Question related to Qualcomm's earnings from 2023-2025", key="user_question")
+    user_question = st.text_input("Ask a Question from the PDF Files", key="user_question")
 
     if st.button("Submit & Process", key="process_button") and api_key:  # Check if API key is provided before processing
         with st.spinner("Processing..."):
@@ -242,7 +265,6 @@ def main():
                 compare_retrievers(user_question, api_key, vector_store)
             
             st.success("Done")
-
 
 if __name__ == "__main__":
     main()
