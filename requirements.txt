@@ -4,5 +4,6 @@ langchain_community
 langchain_huggingface
 sentence_transformers
 PyPDF2
+pypdf
 pysqlite3-binary
 chromadb

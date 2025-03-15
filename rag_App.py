@@ -1,10 +1,20 @@
 import streamlit as st
 from PyPDF2 import PdfReader
+import os
+import platform
+if platform.system() == "Linux":
+    import sys
+    __import__('pysqlite3')
+    import pysqlite3
+    sys.modules['sqlite3'] = sys.modules["pysqlite3"]
+import chromadb
+from chromadb.config import Settings
+
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
-import os
+
 
 from langchain.chains import LLMChain
 from langchain.output_parsers import PydanticOutputParser
@@ -80,7 +90,8 @@ def get_vector_store(text_chunks, api_key):
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     persist_directory = "./chroma_persist"
     
-    vector_store = Chroma.from_documents(text_chunks, embeddings, persist_directory="./chroma_persist")
+    vector_store = Chroma.from_documents(text_chunks, embeddings, persist_directory="./chroma_persist",  
+                                         client_settings= Settings(anonymized_telemetry=False, is_persistent=True))
     return vector_store
 
 
