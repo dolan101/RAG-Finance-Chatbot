@@ -75,18 +75,46 @@ Follow these simple steps to interact with the chatbot:
 # This is the first API key input; no need to repeat it in the main function.
 api_key = st.text_input("Enter your Access Token:", type="password", key="api_key_input")
     
-   
+
 def pdf_loader(path = "/path/") :
+    """
+    Loads PDF documents from the specified directory.
+
+    Args:
+        path (str): The directory path containing PDF files.
+
+    Returns:
+        List[Document]: A list of loaded PDF documents.
+    """
     loader = PyPDFDirectoryLoader(path)
     documents = loader.load()
     return documents
     
 def split_documents(documents):
+    """
+    Splits documents into smaller chunks for processing.
+
+    Args:
+        documents (List[Document]): A list of documents to be split.
+
+    Returns:
+        List[Document]: A list of document chunks.
+    """
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000, separators=["\n\n", "\n", " ", ""])
     chunks = text_splitter.split_documents(documents)
     return chunks
 
 def get_vector_store(text_chunks, api_key):
+    """
+    Creates a vector store from text chunks using embeddings.
+
+    Args:
+        text_chunks (List[Document]): A list of text chunks.
+        api_key (str): The API key for accessing embeddings.
+
+    Returns:
+        Chroma: A Chroma vector store.
+    """
     #embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=api_key)
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     persist_directory = "./chroma_persist"
@@ -97,9 +125,24 @@ def get_vector_store(text_chunks, api_key):
 
 
 class CustomBasicRagRetriever(BaseRetriever):
+    """
+    Custom retriever for basic RAG (Retrieval-Augmented Generation).
+
+    Attributes:
+        vector_store (any): The vector store for document retrieval.
+    """
     vector_store: any
 
     def _get_relevant_documents(self, query: str) -> List[Document]:
+        """
+        Retrieves relevant documents based on the query.
+
+        Args:
+            query (str): The query string.
+
+        Returns:
+            List[Document]: A list of relevant documents.
+        """
         docs_with_scores = self.vector_store.similarity_search_with_relevance_scores(query)
         docs = []
         for doc, score in docs_with_scores:
@@ -109,10 +152,30 @@ class CustomBasicRagRetriever(BaseRetriever):
         return docs
 
     async def _aget_relevant_documents(self, query: str) -> List[Document]:
+        """
+        Asynchronously retrieves relevant documents based on the query.
+
+        Args:
+            query (str): The query string.
+
+        Returns:
+            List[Document]: A list of relevant documents.
+        """
         return self._get_relevant_documents(query)
 
 
 def create_qa_chain_basic_rag(vector_store, api_key, llm):
+    """
+    Creates a QA chain using basic RAG retriever.
+
+    Args:
+        vector_store (Chroma): The vector store for document retrieval.
+        api_key (str): The API key for accessing embeddings.
+        llm (HuggingFaceHub): The language model.
+
+    Returns:
+        RetrievalQA: The QA chain.
+    """
     basic_rag_retriever = CustomBasicRagRetriever(vector_store=vector_store)
     
     chain = RetrievalQA.from_chain_type(
@@ -126,7 +189,17 @@ def create_qa_chain_basic_rag(vector_store, api_key, llm):
 
 
 def create_qa_chain_rerank_cross_encoder(vector_store, api_key, llm):
-    
+    """
+    Creates a QA chain using RAG retriever with cross encoder reranking.
+
+    Args:
+        vector_store (Chroma): The vector store for document retrieval.
+        api_key (str): The API key for accessing embeddings.
+        llm (HuggingFaceHub): The language model.
+
+    Returns:
+        RetrievalQA: The QA chain.
+    """
     basic_rag_retriever = CustomBasicRagRetriever(vector_store=vector_store)
     
     model = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-base")
@@ -145,7 +218,15 @@ def create_qa_chain_rerank_cross_encoder(vector_store, api_key, llm):
     return chain
 
 def get_ground_truth(question):
-    """Fetches the ground truth answer for a given question."""
+    """
+    Fetches the ground truth answer for a given question.
+
+    Args:
+        question (str): The question string.
+
+    Returns:
+        str: The ground truth answer.
+    """
     ground_truth_data = {
         "What was Qualcomm's revenue in Q1 2023?": "Qualcomm's revenue in Q1 2023 was $9.46 billion.",
         "What were Qualcomm's earnings per share in Q2 2023?": "Qualcomm's earnings per share in Q2 2023 were $2.15.",
@@ -156,8 +237,15 @@ def get_ground_truth(question):
 
 
 def parse_evaluation_results(qa_eval):
-    """Parses the QA evaluation text and calculates correct/incorrect answers."""
+    """
+    Parses the QA evaluation text and calculates correct/incorrect answers.
 
+    Args:
+        qa_eval (dict or list): The QA evaluation results.
+
+    Returns:
+        tuple: Total questions, correct answers, incorrect answers, correct percentage, incorrect percentage.
+    """
     if isinstance(qa_eval, dict):  
         qa_eval = [qa_eval]  # Convert single dictionary to a list
 
@@ -179,6 +267,18 @@ def parse_evaluation_results(qa_eval):
     return total_questions, correct_answers, incorrect_answers, correct_percentage, incorrect_percentage
 
 def evaluate_qa(query, predicted_answer, ground_truth, llm):
+    """
+    Evaluates the QA performance using the given LLM.
+
+    Args:
+        query (str): The query string.
+        predicted_answer (str): The predicted answer.
+        ground_truth (str): The ground truth answer.
+        llm (HuggingFaceHub): The language model.
+
+    Returns:
+        dict: The QA evaluation results.
+    """
     qa_evaluator = load_evaluator(EvaluatorType.QA, llm=llm)
     qa_results = qa_evaluator.evaluate_strings(
         prediction=predicted_answer,
@@ -191,7 +291,15 @@ def evaluate_qa(query, predicted_answer, ground_truth, llm):
 
 
 def validate_output(response):
-    # Output-side guardrail to filter hallucinated/misleading answers
+    """
+    Validates the output to filter hallucinated/misleading answers.
+
+    Args:
+        response (dict): The response dictionary.
+
+    Returns:
+        dict: The validated response.
+    """
     hallucination_keywords = ["I think", "might be", "possibly", "uncertain", "estimate"]
     for keyword in hallucination_keywords:
         if keyword.lower() in response["result"].lower():
@@ -201,6 +309,14 @@ def validate_output(response):
 
 
 def compare_retrievers(user_question, api_key, vector_store):
+    """
+    Compares the performance of different retrievers.
+
+    Args:
+        user_question (str): The user's question.
+        api_key (str): The API key for accessing embeddings.
+        vector_store (Chroma): The vector store for document retrieval.
+    """
     # Guardrail: Verify if the question is related to Qualcomm earnings
     guardrail_keywords = ["Qualcomm", "earnings", "quarterly", "financials", "revenue", "profit"]
     if not any(keyword.lower() in user_question.lower() for keyword in guardrail_keywords):
@@ -312,10 +428,22 @@ def compare_retrievers(user_question, api_key, vector_store):
 
 # Helper function to extract answer from response
 def extract_answer(response_text):
+    """
+    Extracts the answer from the response text.
+
+    Args:
+        response_text (str): The response text.
+
+    Returns:
+        str: The extracted answer.
+    """
     answer_start = response_text.find("Answer:") + len("Answer:")
     return response_text[answer_start:].strip()
 
 def main():
+    """
+    The main function to run the Streamlit app.
+    """
     st.header("AI Financial Chatbot💁")
 
     user_question = st.text_input("Ask a Question from the PDF Files", key="user_question")
