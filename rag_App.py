@@ -33,6 +33,7 @@ from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 import pandas as pd
+import re
 
 from langchain_core.runnables import chain
 from typing import List
@@ -148,9 +149,34 @@ def get_ground_truth(question):
     ground_truth_data = {
         "What was Qualcomm's revenue in Q1 2023?": "Qualcomm's revenue in Q1 2023 was $9.46 billion.",
         "What were Qualcomm's earnings per share in Q2 2023?": "Qualcomm's earnings per share in Q2 2023 were $2.15.",
-        "What was Qualcomm's net income in Q3 2023?": "Qualcomm's net income in Q3 2023 was $1.8 billion."
+        "What was Qualcomm's net income in Q3 2023?": "Qualcomm's net income in Q3 2023 was $1.8 billion.",
+        #"What Qualcomm's Q1 Revenue in 2025" : "Qualcomm's Q1 Revenue in 2025 was $11.669 billio."
     }
     return ground_truth_data.get(question, "Ground truth not available.")
+
+
+def parse_evaluation_results(qa_eval):
+    """Parses the QA evaluation text and calculates correct/incorrect answers."""
+
+    if isinstance(qa_eval, dict):  
+        qa_eval = [qa_eval]  # Convert single dictionary to a list
+
+    total_questions = 0
+    correct_answers = 0
+    incorrect_answers = 0
+
+    for res in qa_eval:
+        reasoning_text = res.get("reasoning", "")
+        matches = re.findall(r"GRADE: (CORRECT|INCORRECT)", reasoning_text)
+        
+        total_questions += len(matches)
+        correct_answers += matches.count("CORRECT")
+        incorrect_answers += matches.count("INCORRECT")
+    
+    correct_percentage = (correct_answers / total_questions) * 100 if total_questions > 0 else 0
+    incorrect_percentage = (incorrect_answers / total_questions) * 100 if total_questions > 0 else 0
+    
+    return total_questions, correct_answers, incorrect_answers, correct_percentage, incorrect_percentage
 
 def evaluate_qa(query, predicted_answer, ground_truth, llm):
     qa_evaluator = load_evaluator(EvaluatorType.QA, llm=llm)
@@ -160,7 +186,7 @@ def evaluate_qa(query, predicted_answer, ground_truth, llm):
         input=query
     )
     
-    st.write("QA Evaluation Results: ", qa_results)
+    #st.write("QA Evaluation Results: ", qa_results)
     return qa_results
 
 
@@ -173,83 +199,121 @@ def validate_output(response):
             break
     return response
 
+
 def compare_retrievers(user_question, api_key, vector_store):
     # Guardrail: Verify if the question is related to Qualcomm earnings
     guardrail_keywords = ["Qualcomm", "earnings", "quarterly", "financials", "revenue", "profit"]
     if not any(keyword.lower() in user_question.lower() for keyword in guardrail_keywords):
-        st.write("Reply: I can only provide information about Qualcomm's quarterly earnings.")
+        st.warning("⚠️ I can only provide information about Qualcomm's quarterly earnings.")
         return
     
+    # Set API key if provided
     if api_key:
         os.environ["HUGGINGFACEHUB_API_TOKEN"] = api_key
+        st.success("✅ Hugging Face API key set successfully!")
     
-    #llm_hf = HuggingFaceEndpoint(
-    #    repo_id="HuggingFaceH4/zephyr-7b-beta",
-    #    #repo_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-    #    #repo_id="Intel/dynamic_tinybert",
-    #    #repo_id="HuggingFaceH4/zephyr-7b-beta",
-    #    #repo_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-    #    task="text-generation",
-    #    max_new_tokens=1024,
-    #    do_sample=False,
-    #    repetition_penalty=1.03,
-    #)
-    #llm = ChatHuggingFace(llm=llm_hf)
-    
-    #llm = ChatGoogleGenerativeAI(
-    #    model="gemini-2.0-pro-exp-02-05", 
-    #    temperature=0.9, 
-    #    google_api_key=api_key
-    #)
-    
-    
-    
+    # Initialize LLM (Mistral-7B)
     llm = HuggingFaceHub(
         #repo_id="HuggingFaceH4/zephyr-7b-beta",
         repo_id="mistralai/Mistral-7B-Instruct-v0.3",
-        model_kwargs={"temperature": 0.3, "max_new_tokens":1024},
+        model_kwargs={"temperature": 0.3, "max_new_tokens": 1024},
     )
     
-    st.success("Hugging Face API key set successfully!")
-    
+    # Retrieve ground truth
     ground_truth = get_ground_truth(user_question)
+
+    # Run retrieval chains
     chain1 = create_qa_chain_basic_rag(vector_store, api_key, llm)
     chain2 = create_qa_chain_rerank_cross_encoder(vector_store, api_key, llm)
 
     response1 = chain1.invoke({"query": user_question})
     response2 = chain2.invoke({"query": user_question})
 
-    st.write("## Results from BasicRagRetriever")
-    # Apply output-side guardrail
+    # Apply output-side guardrails
     response1 = validate_output(response1)
-    
-    #st.write("**Reply:** ", response1)
-    response_text = response1["result"]
-    answer_start = response_text.find("Answer:") + len("Answer:")
-    answer = response_text[answer_start:].strip()
-    st.write("**Answer:** ", answer)
-    
-    #st.write("**Reply:** ", response1["result"])
-    ##for doc in response1["source_documents"][0]:
-    doc = response1["source_documents"][0]
-    st.write(f"**Document:** {doc.page_content[:200]}")
-    st.write(f"**Similarity Score:** {doc.metadata.get('score', 'N/A')}")
-
-    qa_eval = evaluate_qa(user_question, answer, ground_truth, llm)
-
-    st.write("## Results from RerankWithCrossEncoder")
     response2 = validate_output(response2)
+
+    # Extract answers
+    answer1 = extract_answer(response1["result"])
+    answer2 = extract_answer(response2["result"])
+
+    # Display answers side by side
+    st.header("📊 Results Comparison")
+
+    #col1, col2 = st.columns(2)
+
+    col1, spacer, col2 = st.columns([1, 0.1, 1])  # Spacer column for separation
+
+
+    with col1:
+        with st.container():
+            st.subheader("Basic RAG Retriever")
+            st.success(f"**Answer:** {answer1}")
+            doc1 = response1["source_documents"][0]
+            similarity1 = doc1.metadata.get('score', 0)  # Default to 0 if missing
     
-    #st.write("**Reply:** ", response2["result"])
-    response_text = response2["result"]
+            # Similarity Score with Percentage
+            st.write(f"🔍 **Similarity Score:** `{similarity1 * 100:.1f}%`")
+            st.progress(similarity1)  
+    
+            # Document Snippet with Consistent Formatting
+            st.write("📄 **Document Snippet:**")
+            st.markdown(
+                f"<div style='border:1px solid #ddd; padding:10px; min-height:100px;'>{doc1.page_content[:200]}...</div>", 
+                unsafe_allow_html=True
+            )
+    
+            # Padding for alignment
+            st.write("")
+    
+    with col2:
+        with st.container():
+            st.subheader("Rerank with Cross Encoder")
+            st.success(f"**Answer:** {answer2}")
+            doc2 = response2["source_documents"][0]
+            similarity2 = doc2.metadata.get('score', 0)  # Default to 0 if missing
+    
+            # Similarity Score with Percentage
+            st.write(f"🔍 **Similarity Score:** `{similarity2 * 100:.1f}%`")
+            st.progress(similarity2)  
+    
+            # Document Snippet with Consistent Formatting
+            st.write("📄 **Document Snippet:**")
+            st.markdown(
+                f"<div style='border:1px solid #ddd; padding:10px; min-height:100px;'>{doc2.page_content[:200]}...</div>", 
+                unsafe_allow_html=True
+            )
+    
+            # Padding for alignment
+            st.write("")
+
+    # QA Evaluation
+    st.header("LLM based QA Evaluation")
+    qa_eval1 = evaluate_qa(user_question, answer1, ground_truth, llm)
+    qa_eval2 = evaluate_qa(user_question, answer2, ground_truth, llm)
+
+    # Process QA evaluations separately for both retrievers
+    total_q1, correct_q1, incorrect_q1, correct_pct1, incorrect_pct1 = parse_evaluation_results(qa_eval1)
+    total_q2, correct_q2, incorrect_q2, correct_pct2, incorrect_pct2 = parse_evaluation_results(qa_eval2)
+
+    # Display results for Basic RAG Retriever
+    st.subheader("🔹 Basic RAG Retriever Evaluation")
+    st.write(f"**Total Questions:** {total_q1}")
+    st.write(f"✅ **Correct Answers:** {correct_q1} ({correct_pct1:.1f}%)")
+    st.write(f"❌ **Incorrect Answers:** {incorrect_q1} ({incorrect_pct1:.1f}%)")
+    st.progress(correct_pct1 / 100)
+
+    # Display results for Rerank with Cross Encoder
+    st.subheader("🔹 Rerank with Cross Encoder Evaluation")
+    st.write(f"**Total Questions:** {total_q2}")
+    st.write(f"✅ **Correct Answers:** {correct_q2} ({correct_pct2:.1f}%)")
+    st.write(f"❌ **Incorrect Answers:** {incorrect_q2} ({incorrect_pct2:.1f}%)")
+    st.progress(correct_pct2 / 100)
+
+# Helper function to extract answer from response
+def extract_answer(response_text):
     answer_start = response_text.find("Answer:") + len("Answer:")
-    answer = response_text[answer_start:].strip()
-    st.write("**Answer:** ", answer)
-    #for doc in response2["source_documents"][0]:
-    doc = response2["source_documents"][0]
-    st.write(f"**Document:** {doc.page_content[:200]}")
-    st.write(f"**Similarity Score:** {doc.metadata.get('score', 'N/A')}")
-    qa_eval = evaluate_qa(user_question, answer, ground_truth, llm)
+    return response_text[answer_start:].strip()
 
 def main():
     st.header("AI Financial Chatbot💁")

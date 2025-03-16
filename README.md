@@ -1,14 +1,14 @@
 
-```markdown
-# Document Genie: Your AI-powered Insight Generator from PDFs
+# Financial AI Assistant: Get Qualcomm's quarterly earnings
+## Hosted Website : https://rag-finance-chatbot-xebqx6exkcs3fffjrtxryz.streamlit.app/
 
-Document Genie is a powerful Streamlit application designed to extract and analyze text from PDF documents, leveraging the advanced capabilities of Huggingface's Generative AI, specifically the Gemini-PRO model. This tool uses a Retrieval-Augmented Generation (RAG) framework to offer precise, context-aware answers to user queries based on the content of uploaded documents.
+## How It Works
 
-## Features
+Follow these simple steps to interact with the chatbot:
 
-- **Instant Insights**: Extracts and analyses text from uploaded PDF documents to provide instant insights.
-- **Retrieval-Augmented Generation**: Utilizes Huggingface's Generative AI model Gemini-PRO for high-quality, contextually relevant answers.
-- **Secure API Key Input**: Ensures secure entry of Huggingface API keys for accessing generative AI models.
+1. **Enter Your API Key**: You'll need API key for the chatbot to access Huggingface's Generative AI models. Obtain your Access Token https://huggingface.co/settings/tokens.
+
+3. **Ask a Question**: Ask any questions related to Qualcomm's earnings from 2023 to 2025.
 
 ## Getting Started
 
@@ -21,9 +21,8 @@ Document Genie is a powerful Streamlit application designed to extract and analy
 
 Clone this repository or download the source code to your local machine. Navigate to the application directory and install the required Python packages:
 
-```bash
 pip install -r requirements.txt
-```
+
 
 ### How to Use
 
